@@ -1,0 +1,773 @@
+###############
+
+W mojej konfiguracji, wszystko jest w osobnych plikach. 
+Jeżeli w Twojej konfiguracji używasz tylko pliku configuration.yaml, trzeba będzie przenieść części konfiguracji do odpowiednich sekcji
+
+- Pliki graficzne mam umieszczone /glowny_folder_hass/www/images/
+- Odkurzacz podłączony za pomocą tej integracji: https://github.com/nqkdev/home-assistant-vacuum-styj02ym
+- W pliku vacuum.py należy zmienić 3 linie:
+  StateVacuumDevice > StateVacuumEntity
+  ALL_PROPS = ["run_state", "mode", "err_state", "battary_life", "box_type", "mop_type", "s_time",
+             "s_area", "suction_grade", "water_grade", "remember_map", "has_map", "is_mop", "has_newmap"]
+  ALL_PROPS = ["run_state", "mode", "err_state", "battary_life", "box_type", "mop_type", "s_time",
+               "s_area", "suction_grade", "water_grade", "remember_map", "has_map", "is_mop", "has_newmap", "side_brush_hours", "main_brush_hours", "hypa_hours", "mop_hours", "repeat_state", "light_state"]
+
+- W lovelace używana jest customowa karta: vertical-stack-in-card
+- Znajdź i zamień wszystkie wystąpienia "NAZWA_ODKURZACZA" na swoją nazwę
+
+###############
+
+
+
+
+================================
+configuration.yaml
+================================
+
+vacuum:
+  - platform: miio2
+    host: 1.2.3.4
+    token: XIAOMI_VACUUM_TOKEN
+    name: NAZWA_ODKURZACZA
+
+
+
+================================
+automations.yaml
+================================
+
+
+- alias: Vacuum - Cleaning Rooms
+  id: vacuum_cleaning_rooms
+  trigger:
+  - platform: state
+    entity_id: input_select.vacuum_room
+    from: Wybierz pomieszczenie
+  action:
+  - service: script.turn_on
+    data_template:
+      entity_id: "{% if is_state(\"input_select.vacuum_room\", \"Kuchnia\") %}\n  script.vacuum_room_kuchnia\n\
+       {% elif is_state(\"input_select.vacuum_room\", \"Salon\") %}\n  script.vacuum_room_kuchnia\n\
+       {% elif is_state(\"input_select.vacuum_room\", \"Kanapa\") %}\n  script.vacuum_room_kanapa\n\
+       {% elif is_state(\"input_select.vacuum_room\", \"Przedpokój\") %}\n  script.vacuum_room_przedpokoj\n\
+       {% elif is_state(\"input_select.vacuum_room\", \"Łazienka\") %}\n  script.vacuum_room_lazienka\n\
+       {% elif is_state(\"input_select.vacuum_room\", \"Sypialnia\") %}\n  script.vacuum_room_sypialnia\n\
+       {% else %} {% endif %}\n"
+  - service: input_select.select_option
+    entity_id: input_select.vacuum_room
+    data_template:
+      option: Wybierz pomieszczenie
+
+
+- alias: Vacuum - Ilosc wody
+  id: vacuum_water_grade_switch
+  trigger:
+  - entity_id: vacuum.NAZWA_ODKURZACZA
+    platform: state
+  action:
+  - service_template: "{% if states.vacuum.NAZWA_ODKURZACZA.attributes.water_grade == 11  %}\n\
+     \  script.vacuum_water_grade_medium\n{% elif states.vacuum.NAZWA_ODKURZACZA.attributes.water_grade\
+     \ == 12  %}\n  script.vacuum_water_grade_high\n{% elif states.vacuum.NAZWA_ODKURZACZA.attributes.water_grade\
+     \ == 13  %}\n  script.vacuum_water_grade_low\n{% else %} {% endif %}\n"
+  - data: {}
+    entity_id: automation.vacuum_ilosc_wody
+    service: automation.turn_off
+  initial_state: false
+
+
+- alias: Vacuum - Tryb odkurzania
+  id: vacuum_fan_speed
+  trigger:
+  - entity_id: vacuum.NAZWA_ODKURZACZA
+    platform: state
+  action:
+  - service_template: "{% if states.vacuum.NAZWA_ODKURZACZA.attributes.suction_grade == 0  %}\n\
+     \  script.vacuum_set_standard\n{% elif states.vacuum.NAZWA_ODKURZACZA.attributes.suction_grade\
+     \ == 1  %}\n  script.vacuum_set_medium\n{% elif states.vacuum.NAZWA_ODKURZACZA.attributes.suction_grade\
+     \ == 2  %}\n  script.vacuum_set_turbo\n{% elif states.vacuum.NAZWA_ODKURZACZA.attributes.suction_grade\
+     \ == 3  %}\n  script.vacuum_set_silent\n{% else %}\nscript.vacuum_set_silent\n{% endif %}\n"
+  - data: {}
+    entity_id: automation.vacuum_tryb_odkurzania
+    service: automation.turn_off
+  initial_state: false
+
+
+- alias: Vacuum - LED status
+  id: vacuum_led_switch
+  trigger:
+  - entity_id: vacuum.NAZWA_ODKURZACZA
+    platform: state
+  action:
+  - service_template: "{% if states.vacuum.NAZWA_ODKURZACZA.attributes.light_state == 0  %}\n\
+     \  script.vacuum_set_led_on\n{% elif states.vacuum.NAZWA_ODKURZACZA.attributes.light_state\
+     \ == 1  %}\n  script.vacuum_set_led_off\n{% else %}{% endif %}\n"
+  - data: {}
+    entity_id: automation.vacuum_led_status
+    service: automation.turn_off
+  initial_state: false
+
+
+- alias: Vacuum - Tryb pracy
+  id: vacuum_set_mop
+  trigger:
+  - entity_id: vacuum.NAZWA_ODKURZACZA
+    platform: state
+  action:
+  - service_template: "{% if states.vacuum.NAZWA_ODKURZACZA.attributes.is_mop == 0  %}\n\
+     \  script.vacuum_set_mop_1\n{% elif states.vacuum.NAZWA_ODKURZACZA.attributes.is_mop\
+     \ == 1  %}\n  script.vacuum_set_mop_2\n{% else %}\nscript.vacuum_set_mop_0\n{% endif %}\n"
+  - data: {}
+    entity_id: automation.vacuum_tryb_pracy
+    service: automation.turn_off
+  initial_state: false
+ 
+ 
+================================
+sensors.yaml
+================================
+
+ 
+  - platform: template
+    sensors:
+      vacuum_status:
+        friendly_name: Vacuum - Status
+        value_template: 'Status: {{ states.vacuum.NAZWA_ODKURZACZA.attributes.status }}'
+        icon_template: >
+         {% set val =  states.vacuum.NAZWA_ODKURZACZA.attributes.status  %}
+          {% if val == 'Charging' %}
+            mdi:battery-charging
+          {% elif val == 'Cleaning' %}
+            mdi:move-resize
+          {% elif val == 'Returning home' %}
+            mdi:keyboard-return
+          {% elif val == 'Idle' %}
+            mdi:dots-horizontal
+          {% elif val == 'Paused' %}
+            mdi:pause-circle
+          {% else %}
+            mdi:help-circle
+          {% endif %}
+      vacuum_fan_speed:
+        friendly_name: Vacuum - Fan Speed
+        value_template: '{{ states.vacuum.NAZWA_ODKURZACZA.attributes.fan_speed }}'
+        icon_template: 'mdi:speedometer'
+      vacuum_battery:
+        friendly_name: Vacuum - Battery
+        value_template: 'Bateria: {{ states.vacuum.NAZWA_ODKURZACZA.attributes.battery_level }}'
+        unit_of_measurement: '%'
+        icon_template: '{{ states.vacuum.NAZWA_ODKURZACZA.attributes.battery_icon }}'
+      vacuum_cleaning_time:
+        friendly_name: Vacuum - Time of Last Cycle
+        value_template: '{{ states.vacuum.NAZWA_ODKURZACZA.attributes.s_time }}'
+        icon_template: 'mdi:timer'
+      vacuum_cleaned_area:
+        friendly_name: Vacuum - Area of Last Cycle
+        unit_of_measurement: 'm ²'
+        value_template: '{{ states.vacuum.NAZWA_ODKURZACZA.attributes.s_area }}'
+        icon_template: 'mdi:ruler'
+      vacuum_cleanmainbrush:
+        friendly_name: Vacuum - Main brush hours
+        # unit_of_measurement: '%'
+        value_template: 'Główna szczotka: {{states.vacuum.NAZWA_ODKURZACZA.attributes.main_brush_hours}}h | {{(states.vacuum.NAZWA_ODKURZACZA.attributes.main_brush_hours / 360 * 100) | round(0) }}%'
+        icon_template: 'mdi:screwdriver'
+      vacuum_cleansidebrush:
+        friendly_name: Vacuum - Side brush hours
+        # unit_of_measurement: '%'
+        value_template: 'Boczna szczotka: {{states.vacuum.NAZWA_ODKURZACZA.attributes.side_brush_hours}}h | {{(states.vacuum.NAZWA_ODKURZACZA.attributes.side_brush_hours / 180 * 100) | round(0) }}%'
+        icon_template: 'mdi:screwdriver'
+      vacuum_cleanfilter:
+        friendly_name: Vacuum - Filter hours
+        # unit_of_measurement: '%'
+        value_template: 'Filtr: {{states.vacuum.NAZWA_ODKURZACZA.attributes.hypa_hours}}h | {{(states.vacuum.NAZWA_ODKURZACZA.attributes.hypa_hours / 180 * 100) | round(0) }}%'
+        icon_template: 'mdi:screwdriver'
+      vacuum_sensordirtyleft:
+        friendly_name: Vacuum - Mop hours
+        # unit_of_measurement: '%'
+        value_template: 'Mop: {{states.vacuum.NAZWA_ODKURZACZA.attributes.mop_hours}}h | {{(states.vacuum.NAZWA_ODKURZACZA.attributes.mop_hours / 180 * 100) | round(0) }}%'
+        icon_template: 'mdi:screwdriver'
+      vacuum_mop:
+        friendly_name: Vacuum - Is mop installed
+        value_template: >-
+          {% if states.vacuum.NAZWA_ODKURZACZA.attributes.mop_type == 1 %}
+            Gotowy
+          {% else %}
+            Brak
+          {% endif %}
+        icon_template: 'mdi:screwdriver'
+      vacuum_dustbox:
+        friendly_name: Vacuum - Dustbox type
+        value_template: >-
+          {% if states.vacuum.NAZWA_ODKURZACZA.attributes.box_type == 1  %}
+            Zwykły
+          {% elif states.vacuum.NAZWA_ODKURZACZA.attributes.box_type == 3  %}
+            Z wodą
+          {% else %}
+            Brak
+          {% endif %}
+        icon_template: 'mdi:screwdriver'
+      vacuum_cleanmode:
+        friendly_name: Vacuum - Cleaning Mode
+        value_template: >-
+          {% if states.vacuum.NAZWA_ODKURZACZA.attributes.is_mop == 0  %}
+            Odkurzanie
+          {% elif states.vacuum.NAZWA_ODKURZACZA.attributes.is_mop == 1  %}
+            Odkurzanie & Mop
+          {% elif states.vacuum.NAZWA_ODKURZACZA.attributes.is_mop == 2  %}
+          Mop
+          {% else %}
+            Nie gotowy
+          {% endif %}
+        icon_template: 'mdi:screwdriver'
+      vacuum_watergrade:
+        friendly_name: Vacuum - Water level
+        value_template: >-
+          {% if states.vacuum.NAZWA_ODKURZACZA.attributes.water_grade == 11  %}
+            Ilość wody: Mała
+          {% elif states.vacuum.NAZWA_ODKURZACZA.attributes.water_grade == 12  %}
+            Ilość wody: Średnia
+          {% elif states.vacuum.NAZWA_ODKURZACZA.attributes.water_grade == 13  %}
+            Ilość wody: Duża
+          {% else %}
+            Ilość wody: brak
+          {% endif %}
+      vacuum_led:
+        value_template: >-
+          {% if states.vacuum.NAZWA_ODKURZACZA.attributes.light_state == 0  %}
+            LED wyłączone
+          {% else %}
+            LED włączone
+          {% endif %}
+        friendly_name: Vacuum - LED
+        icon_template: >-
+          {% if states.vacuum.NAZWA_ODKURZACZA.attributes.light_state == 0  %}
+          mdi:led-variant-off
+          {% else %}
+          mdi:led-on
+          {%- endif %}
+
+================================
+input_select.yaml
+================================
+
+  vacuum_room:
+    name: Które pomieszczenie odkurzyć?
+    options:
+     - Wybierz pomieszczenie
+     - Kuchnia
+     - Salon
+     - Biurko
+     - Wejście
+     - Korytarz
+     - Sypialnia
+     - Łazienka
+
+
+================================
+scripts.yaml
+================================
+
+vacuum_room_kuchnia:
+  alias: Vacuum - Pokój - Kuchnia
+  sequence:
+  - service: vacuum.send_command
+    data:
+      entity_id: vacuum.NAZWA_ODKURZACZA
+      command: set_language
+      params: 2
+  - service: vacuum.send_command
+    data:
+      entity_id: vacuum.NAZWA_ODKURZACZA
+      command: set_mode_withroom
+      params: [0, 1, 1, 13]
+
+vacuum_room_salon:
+  alias: Vacuum - Pokój - Salon
+  sequence:
+  - service: vacuum.send_command
+    data:
+      entity_id: vacuum.NAZWA_ODKURZACZA
+      command: set_language
+      params: 2
+  - service: vacuum.send_command
+    data:
+      entity_id: vacuum.NAZWA_ODKURZACZA
+      command: set_mode_withroom
+      params: [0, 1, 1, 15]
+
+vacuum_room_biurko:
+  alias: Vacuum - Pokój - Biurko
+  sequence:
+  - service: vacuum.send_command
+    data:
+      entity_id: vacuum.NAZWA_ODKURZACZA
+      command: set_language
+      params: 2
+  - service: vacuum.send_command
+    data:
+      entity_id: vacuum.NAZWA_ODKURZACZA
+      command: set_mode_withroom
+      params: [0, 1, 1, 16]
+ 
+vacuum_room_wejscie:
+  alias: Vacuum - Pokój - Wejscie
+  sequence:
+  - service: vacuum.send_command
+    data:
+      entity_id: vacuum.NAZWA_ODKURZACZA
+      command: set_language
+      params: 2
+  - service: vacuum.send_command
+    data:
+      entity_id: vacuum.NAZWA_ODKURZACZA
+      command: set_mode_withroom
+      params: [0, 1, 1, 14]
+
+vacuum_room_korytarz:
+  alias: Vacuum - Pokój - Korytarz
+  sequence:
+  - service: vacuum.send_command
+    data:
+      entity_id: vacuum.NAZWA_ODKURZACZA
+      command: set_language
+      params: 2
+  - service: vacuum.send_command
+    data:
+      entity_id: vacuum.NAZWA_ODKURZACZA
+      command: set_mode_withroom
+      params: [0, 1, 1, 12]
+
+vacuum_room_sypialnia:
+  alias: Vacuum - Pokój - Sypialnia
+  sequence:
+  - service: vacuum.send_command
+    data:
+      entity_id: vacuum.NAZWA_ODKURZACZA
+      command: set_language
+      params: 2
+  - service: vacuum.send_command
+    data:
+      entity_id: vacuum.NAZWA_ODKURZACZA
+      command: set_mode_withroom
+      params: [0, 1, 1, 10]
+
+vacuum_room_lazienka:
+  alias: Vacuum - Pokój - Łazienka
+  sequence:
+  - service: vacuum.send_command
+    data:
+      entity_id: vacuum.NAZWA_ODKURZACZA
+      command: set_language
+      params: 2
+  - service: vacuum.send_command
+    data:
+      entity_id: vacuum.NAZWA_ODKURZACZA
+      command: set_mode_withroom
+      params: [0, 1, 1, 11]
+ 
+vacuum_water_grade_low:
+  alias: Vacuum - Ilość wody niski
+  sequence:
+  - data:
+      command: set_suction
+      params: 11
+    entity_id: vacuum.NAZWA_ODKURZACZA
+    service: vacuum.send_command
+ 
+vacuum_water_grade_medium:
+  alias: Vacuum - Ilość wody średni
+  sequence:
+  - data:
+      command: set_suction
+      params: 12
+    entity_id: vacuum.NAZWA_ODKURZACZA
+    service: vacuum.send_command
+ 
+vacuum_water_grade_high:
+  alias: Vacuum - Ilość wody wysoki
+  sequence:
+  - data:
+      command: set_suction
+      params: 13
+    entity_id: vacuum.NAZWA_ODKURZACZA
+    service: vacuum.send_command
+ 
+vacuum_set_silent:
+  alias: Vacuum - Odkurzanie - Silent
+  sequence:
+  - data:
+     fan_speed: Silent
+    entity_id: vacuum.NAZWA_ODKURZACZA
+    service: vacuum.set_fan_speed
+   
+vacuum_set_standard:
+  alias: Vacuum - Odkurzanie - Standard
+  sequence:
+  - data:
+     fan_speed: Standard
+    entity_id: vacuum.NAZWA_ODKURZACZA
+    service: vacuum.set_fan_speed
+ 
+vacuum_set_medium:
+  alias: Vacuum - Odkurzanie - Medium
+  sequence:
+  - data:
+     fan_speed: Medium
+    entity_id: vacuum.NAZWA_ODKURZACZA
+    service: vacuum.set_fan_speed
+ 
+vacuum_set_turbo:
+  alias: Vacuum - Odkurzanie - Turbo
+  sequence:
+  - data:
+     fan_speed: Turbo
+    entity_id: vacuum.NAZWA_ODKURZACZA
+    service: vacuum.set_fan_speed
+ 
+vacuum_set_led_on:
+  alias: Vacuum - LED on
+  sequence:
+  - data:
+      command: set_light
+      params: 1
+    entity_id: vacuum.NAZWA_ODKURZACZA
+    service: vacuum.send_command
+ 
+vacuum_set_led_off:
+  alias: Vacuum - LED off
+  sequence:
+  - data:
+      command: set_light
+      params: 0
+    entity_id: vacuum.NAZWA_ODKURZACZA
+    service: vacuum.send_command
+
+vacuum_set_mop_0:
+  alias: Vacuum - Tryb - Odkurzacz
+  sequence:
+  - data:
+      command: set_mop
+      params: 0
+    entity_id: vacuum.NAZWA_ODKURZACZA
+    service: vacuum.send_command
+ 
+vacuum_set_mop_1:
+  alias: Vacuum - Tryb - Odkurzacz i Mop
+  sequence:
+  - data:
+      command: set_mop
+      params: 1
+    entity_id: vacuum.NAZWA_ODKURZACZA
+    service: vacuum.send_command
+ 
+vacuum_set_mop_2:
+  alias: Vacuum - Tryb - Mop
+  sequence:
+  - data:
+      command: set_mop
+      params: 2
+    entity_id: vacuum.NAZWA_ODKURZACZA
+    service: vacuum.send_command
+
+
+================================
+lovelace/odkurzacz.yaml
+================================
+
+cards:
+  - type: 'custom:vertical-stack-in-card'
+    cards:
+      - type: picture-elements
+        image: /local/images/vacuum-top.png
+        elements:
+          - icon: 'mdi:robot-vacuum'
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              left: 10%
+              top: 92%
+            tap_action:
+              action: call-service
+              service: automation.trigger
+              service_data:
+                entity_id: automation.vacuum_tryb_pracy
+            type: icon
+          - icon: 'mdi:fan'
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              left: 20%
+              top: 92%
+            tap_action:
+              action: call-service
+              service: automation.trigger
+              service_data:
+                entity_id: automation.vacuum_tryb_odkurzania
+            type: icon
+          - type: state-icon
+            entity: sensor.vacuum_led
+            style:
+              '--paper-item-icon-color': '#e6e7e9'
+              '--paper-item-icon-active-color': 'red'
+              left: 30%
+              top: 92%
+            tap_action:
+              action: call-service
+              service: automation.trigger
+              service_data:
+                entity_id: automation.vacuum_led_status
+          - icon: 'mdi:play'
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              left: 40%
+              top: 92%
+            tap_action:
+              action: call-service
+              service: vacuum.start
+              service_data:
+                entity_id: vacuum.NAZWA_ODKURZACZA
+            type: icon
+          - icon: 'mdi:pause'
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              left: 50%
+              top: 92%
+            tap_action:
+              action: call-service
+              service: vacuum.pause
+              service_data:
+                entity_id: vacuum.NAZWA_ODKURZACZA
+            type: icon
+          - icon: 'mdi:stop'
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              left: 60%
+              top: 92%
+            tap_action:
+              action: call-service
+              service: vacuum.stop
+              service_data:
+                entity_id: vacuum.NAZWA_ODKURZACZA
+            type: icon
+          - icon: 'mdi:home'
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              left: 70%
+              top: 92%
+            tap_action:
+              action: call-service
+              service: vacuum.return_to_base
+              service_data:
+                entity_id: vacuum.NAZWA_ODKURZACZA
+            type: icon
+          - icon: 'mdi:bell-ring'
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              left: 80%
+              top: 92%
+            tap_action:
+              action: call-service
+              service: vacuum.locate
+              service_data:
+                entity_id: vacuum.NAZWA_ODKURZACZA
+            type: icon
+          - icon: 'mdi:water'
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              left: 90%
+              top: 92%
+            tap_action:
+              action: call-service
+              service: automation.trigger
+              service_data:
+                entity_id: automation.vacuum_ilosc_wody_3
+            type: icon
+          - entity: sensor.vacuum_cleanmode
+            prefix: 'Tryb: '
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              border-left-style: solid
+              font-size: 90%
+              font-weight: bold
+              left: 1%
+              pointer-events: none
+              top: 15%
+              transform: none
+            type: state-label
+          - entity: sensor.vacuum_battery
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              border-left-style: solid
+              font-size: 90%
+              font-weight: bold
+              left: 1%
+              pointer-events: none
+              top: 35%
+              transform: none
+            type: state-label
+          - entity: sensor.vacuum_fan_speed
+            prefix: 'Prędkość: '
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              border-left-style: solid
+              font-size: 90%
+              font-weight: bold
+              left: 1%
+              pointer-events: none
+              top: 25%
+              transform: none
+            type: state-label
+          - entity: sensor.vacuum_dustbox
+            prefix: 'Pojemnik: '
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              border-left-style: solid
+              font-size: 90%
+              font-weight: bold
+              left: 1%
+              pointer-events: none
+              top: 45%
+              transform: none
+            type: state-label
+          - entity: sensor.vacuum_mop
+            prefix: 'Mop: '
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              border-left-style: solid
+              font-size: 90%
+              font-weight: bold
+              left: 1%
+              pointer-events: none
+              top: 55%
+              transform: none
+            type: state-label
+          - entity: sensor.vacuum_cleaned_area
+            prefix: 'Obszar: '
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              font-size: 110%
+              font-weight: bold
+              left: 15%
+              pointer-events: none
+              top: 77%
+            type: state-label
+          - entity: sensor.vacuum_cleaning_time
+            prefix: 'Czas: '
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              font-size: 110%
+              font-weight: bold
+              pointer-events: none
+              right: -5%
+              top: 77%
+            suffix: ' min'
+            type: state-label
+          - entity: sensor.vacuum_cleanmainbrush
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              border-right-style: solid
+              font-size: 90%
+              font-weight: bold
+              pointer-events: none
+              right: 1%
+              top: 15%
+              transform: none
+            type: state-label
+          - entity: sensor.vacuum_cleansidebrush
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              border-right-style: solid
+              font-size: 90%
+              font-weight: bold
+              pointer-events: none
+              right: 1%
+              top: 25%
+              transform: none
+            type: state-label
+          - entity: sensor.vacuum_sensordirtyleft
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              border-right-style: solid
+              font-size: 90%
+              font-weight: bold
+              pointer-events: none
+              right: 1%
+              top: 35%
+              transform: none
+            type: state-label
+          - entity: sensor.vacuum_cleanfilter
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              border-right-style: solid
+              font-size: 90%
+              font-weight: bold
+              pointer-events: none
+              right: 1%
+              top: 45%
+              transform: none
+            type: state-label
+          - entity: sensor.vacuum_watergrade
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              border-right-style: solid
+              font-size: 90%
+              font-weight: bold
+              pointer-events: none
+              right: 1%
+              top: 55%
+              transform: none
+            type: state-label
+          - entity: vacuum.NAZWA_ODKURZACZA
+            style:
+              color: white
+              text-shadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black'
+              font-size: 150%
+              font-weight: bold
+              left: 50%
+              top: 8%
+            tap_action:
+              action: more-info
+            type: state-label
+      - type: entities
+        image: '/local/images/vacuum-top.png'
+        style: |
+         ha-card {
+            background-image: url("/local/images/vacuum-bottom3.jpg");
+           }
+        entities:
+          - entity: input_select.vacuum_room
+            image: '/local/images/vacuum-icon-room1.png'
+            style:
+              ha-paper-dropdown-menu:
+                 $:
+                   paper-input:
+                     $:
+                      paper-input-container: |
+                        label {
+                           font-size: 15px;
+                           color: white;
+                         }
+                        iron-input {
+                           font-size: 16px;
+                           color: #e5e5e5;
+                         }
+
+
+
